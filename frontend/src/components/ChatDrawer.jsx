@@ -1,0 +1,75 @@
+// Lazy-loaded — only imports socket.io-client when chat is opened
+import { useState, useEffect, useRef } from "react";
+import { getSocket } from "../hooks/useSocket";
+import { useChatStore } from "../store/chatStore";
+import { useAuth } from "../hooks/useAuth";
+
+export default function ChatDrawer({ property, otherUserId, onClose }) {
+  const { user } = useAuth();
+  const [text, setText] = useState("");
+  const bottomRef = useRef(null);
+  const roomKey = `${property.id}:${otherUserId}`;
+  const messages = useChatStore((s) => s.getMessages(roomKey));
+  const setHistory = useChatStore((s) => s.setHistory);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    socket.emit("join_chat", { property_id: property.id, other_user_id: otherUserId });
+  }, [property.id, otherUserId]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const send = () => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const socket = getSocket();
+    socket?.emit("send_message", { property_id: property.id, other_user_id: otherUserId, message: trimmed });
+    setText("");
+  };
+
+  return (
+    <div className="fixed right-0 top-0 h-full w-80 bg-white border-l border-gray-200 shadow-xl flex flex-col z-40">
+      <div className="flex items-center justify-between border-b px-4 py-3">
+        <h3 className="font-semibold text-gray-900 text-sm">Chat — {property.title}</h3>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.length === 0 && (
+          <p className="text-center text-xs text-gray-400 mt-6">No messages yet. Start the conversation!</p>
+        )}
+        {messages.map((m, i) => {
+          const mine = m.sender_id === user?.id;
+          return (
+            <div key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${mine ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-900"}`}>
+                {m.message}
+              </div>
+            </div>
+          );
+        })}
+        <div ref={bottomRef} />
+      </div>
+
+      <div className="border-t p-3 flex gap-2">
+        <input
+          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-400"
+          placeholder="Type a message..."
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+        />
+        <button
+          onClick={send}
+          className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600"
+        >
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
