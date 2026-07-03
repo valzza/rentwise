@@ -62,6 +62,10 @@ def create_app() -> FastAPI:
     from app.routers.notification_router import router as notification_router
     from app.routers.admin_router import router as admin_router
     from app.routers.ml_router import router as ml_router
+    from app.routers.file_router import router as file_router
+    from app.routers.saved_property_router import router as saved_property_router
+    from app.routers.settings_router import router as settings_router
+    from app.routers.export_router import router as export_router
 
     _app.include_router(auth_router,         prefix="/api/auth",          tags=["Auth"])
     _app.include_router(user_router,         prefix="/api/users",         tags=["Users"])
@@ -75,6 +79,10 @@ def create_app() -> FastAPI:
     _app.include_router(notification_router, prefix="/api/notifications", tags=["Notifications"])
     _app.include_router(admin_router,        prefix="/api/admin",         tags=["Admin"])
     _app.include_router(ml_router,           prefix="/api/ml",            tags=["ML"])
+    _app.include_router(file_router,         prefix="/api/files",         tags=["Files"])
+    _app.include_router(saved_property_router, prefix="/api/saved-properties", tags=["Saved Properties"])
+    _app.include_router(settings_router,     prefix="/api/settings",      tags=["Settings"])
+    _app.include_router(export_router,        prefix="/api/admin",         tags=["Export"])
 
     return _app
 
