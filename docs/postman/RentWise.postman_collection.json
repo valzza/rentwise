@@ -1,0 +1,202 @@
+{
+  "info": {
+    "name": "RentWise API",
+    "description": "Full RentWise REST API collection. Set {{baseUrl}} (default http://localhost:8000). Run Auth > Login first; it saves {{accessToken}} and {{refreshToken}} automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8000" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/register",
+            "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Test\",\n  \"last_name\": \"User\",\n  \"email\": \"test@rentwise.com\",\n  \"password\": \"Test1234\",\n  \"role\": \"tenant\"\n}" }
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', data.access_token);",
+                  "pm.collectionVariables.set('refreshToken', data.refresh_token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"tenant@rentwise.com\",\n  \"password\": \"Demo1234\"\n}" }
+          }
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/refresh",
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/api/auth/logout",
+            "body": { "mode": "raw", "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "Get me", "request": { "method": "GET", "url": "{{baseUrl}}/api/users/me" } },
+        { "name": "Update me", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/users/me", "body": { "mode": "raw", "raw": "{\n  \"first_name\": \"Updated\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Properties",
+      "item": [
+        { "name": "Search", "request": { "method": "GET", "url": "{{baseUrl}}/api/properties/search?q=&page=1&page_size=12" } },
+        { "name": "Featured", "request": { "method": "GET", "url": "{{baseUrl}}/api/properties/featured" } },
+        { "name": "Get by id", "request": { "method": "GET", "url": "{{baseUrl}}/api/properties/1" } },
+        { "name": "Cities", "request": { "method": "GET", "url": "{{baseUrl}}/api/properties/cities" } },
+        { "name": "Amenities", "request": { "method": "GET", "url": "{{baseUrl}}/api/properties/amenities" } },
+        { "name": "Create (landlord)", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/properties", "body": { "mode": "raw", "raw": "{\n  \"title\": \"New listing\",\n  \"description\": \"Nice place\",\n  \"price\": 1200,\n  \"city_id\": 1,\n  \"size_m2\": 700,\n  \"num_rooms\": 2,\n  \"num_bathrooms\": 1\n}" } } },
+        { "name": "Update", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/properties/1", "body": { "mode": "raw", "raw": "{\n  \"price\": 1300\n}" } } },
+        { "name": "Delete", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/properties/1" } }
+      ]
+    },
+    {
+      "name": "Saved Properties",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/saved-properties" } },
+        { "name": "Toggle", "request": { "method": "POST", "url": "{{baseUrl}}/api/saved-properties/1" } },
+        { "name": "Remove", "request": { "method": "DELETE", "url": "{{baseUrl}}/api/saved-properties/1" } }
+      ]
+    },
+    {
+      "name": "Files",
+      "item": [
+        {
+          "name": "Upload",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/files/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": [] },
+                { "key": "entity", "value": "property", "type": "text" },
+                { "key": "entity_id", "value": "1", "type": "text" },
+                { "key": "link_property", "value": "true", "type": "text" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/bookings", "body": { "mode": "raw", "raw": "{\n  \"property_id\": 1,\n  \"scheduled_at\": \"2026-07-01T10:00:00\"\n}" } } },
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/bookings?role=tenant&page=1&page_size=10" } },
+        { "name": "Update status", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/bookings/1/status", "body": { "mode": "raw", "raw": "{\n  \"status\": \"confirmed\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Applications",
+      "item": [
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/applications", "body": { "mode": "raw", "raw": "{\n  \"property_id\": 1,\n  \"message\": \"I am interested\"\n}" } } },
+        { "name": "List mine", "request": { "method": "GET", "url": "{{baseUrl}}/api/applications?page=1&page_size=10" } },
+        { "name": "List landlord", "request": { "method": "GET", "url": "{{baseUrl}}/api/applications/landlord?page=1&page_size=10" } },
+        { "name": "Update status", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/applications/1/status", "body": { "mode": "raw", "raw": "{\n  \"status\": \"approved\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Leases",
+      "item": [
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/leases", "body": { "mode": "raw", "raw": "{\n  \"property_id\": 1,\n  \"tenant_id\": 3,\n  \"start_date\": \"2026-07-01\",\n  \"end_date\": \"2027-07-01\",\n  \"monthly_rent\": 1200,\n  \"deposit_amount\": 1200\n}" } } },
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/leases" } }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        { "name": "Create intent", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/payments/create-intent", "body": { "mode": "raw", "raw": "{\n  \"lease_id\": 1\n}" } } },
+        { "name": "My payments", "request": { "method": "GET", "url": "{{baseUrl}}/api/payments/my" } },
+        { "name": "Earnings (landlord)", "request": { "method": "GET", "url": "{{baseUrl}}/api/payments/earnings" } }
+      ]
+    },
+    {
+      "name": "Maintenance",
+      "item": [
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/maintenance", "body": { "mode": "raw", "raw": "{\n  \"property_id\": 1,\n  \"title\": \"Leaky tap\",\n  \"description\": \"Kitchen tap drips\",\n  \"priority\": \"medium\"\n}" } } },
+        { "name": "List mine", "request": { "method": "GET", "url": "{{baseUrl}}/api/maintenance" } },
+        { "name": "List landlord", "request": { "method": "GET", "url": "{{baseUrl}}/api/maintenance/landlord" } },
+        { "name": "Update status", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/maintenance/1", "body": { "mode": "raw", "raw": "{\n  \"status\": \"in_progress\"\n}" } } }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        { "name": "Create", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/reviews", "body": { "mode": "raw", "raw": "{\n  \"property_id\": 1,\n  \"rating\": 5,\n  \"comment\": \"Great place\"\n}" } } },
+        { "name": "List for property", "request": { "method": "GET", "url": "{{baseUrl}}/api/reviews/property/1" } }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        { "name": "List", "request": { "method": "GET", "url": "{{baseUrl}}/api/notifications" } },
+        { "name": "Mark read", "request": { "method": "POST", "url": "{{baseUrl}}/api/notifications/1/read" } }
+      ]
+    },
+    {
+      "name": "ML",
+      "item": [
+        { "name": "Estimate price", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/ml/estimate-price", "body": { "mode": "raw", "raw": "{\n  \"city_id\": 1,\n  \"size_m2\": 700,\n  \"num_rooms\": 2,\n  \"num_bathrooms\": 1,\n  \"is_furnished\": false,\n  \"is_pet_friendly\": false\n}" } } }
+      ]
+    },
+    {
+      "name": "Settings (CMS)",
+      "item": [
+        { "name": "Public settings", "request": { "method": "GET", "url": "{{baseUrl}}/api/settings/public" } }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "Users", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/users?page=1&page_size=20" } },
+        { "name": "Update user", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/admin/users/2", "body": { "mode": "raw", "raw": "{\n  \"is_active\": false\n}" } } },
+        { "name": "Reports", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/reports?date_from=2026-01-01&date_to=2026-12-31" } },
+        { "name": "Properties", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/properties" } },
+        { "name": "Audit logs", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/audit-logs" } },
+        { "name": "Settings list", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/settings" } },
+        { "name": "Update setting", "request": { "method": "PUT", "header": [{ "key": "Content-Type", "value": "application/json" }], "url": "{{baseUrl}}/api/admin/settings/homepage_title", "body": { "mode": "raw", "raw": "{\n  \"value\": \"Find your next home with RentWise\"\n}" } } },
+        { "name": "Export entity", "request": { "method": "GET", "url": "{{baseUrl}}/api/admin/export/properties?format=csv" } },
+        { "name": "Import entity", "request": { "method": "POST", "url": "{{baseUrl}}/api/admin/import/users", "body": { "mode": "formdata", "formdata": [{ "key": "file", "type": "file", "src": [] }] } } }
+      ]
+    }
+  ]
+}
