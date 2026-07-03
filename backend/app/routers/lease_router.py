@@ -49,4 +49,3 @@ async def get_lease(
     svc: LeaseService = Depends(_svc),
 ):
     return await svc.get(lease_id)
-lease_router.py
