@@ -1,8 +1,9 @@
 from typing import Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, Header, Request, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, get_current_user, require_role
+from app.core.dependencies import get_db, get_current_user, require_role, require_permission
 from app.models.user_models import User
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.lease_repository import LeaseRepository
@@ -50,13 +51,22 @@ async def stripe_webhook(
 @router.get("/my", response_model=list)
 async def my_payments(
     status_filter: Optional[str] = Query(None, alias="status"),
+    type_filter: Optional[str] = Query(None, alias="type"),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    min_amount: Optional[float] = Query(None),
+    max_amount: Optional[float] = Query(None),
+    sort_order: str = Query("desc"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: User = Depends(require_role("tenant")),
     db: AsyncSession = Depends(get_db),
 ):
     repo = PaymentRepository(db)
-    items, total = await repo.get_for_tenant(current_user.id, status_filter, page, page_size)
+    items, total = await repo.get_for_tenant(
+        current_user.id, status_filter, page, page_size,
+        type_filter, date_from, date_to, min_amount, max_amount, sort_order,
+    )
     return items
 
 
