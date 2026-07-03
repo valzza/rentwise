@@ -48,10 +48,13 @@ psql -U postgres -c "CREATE DATABASE rentwise_db;"
 # 5. Run migrations (creates all 24 tables)
 alembic upgrade head
 
-# 6. Train the ML model (run once)
+# 6. Seed roles, permissions, amenities and CMS settings (idempotent)
+psql -U postgres -d rentwise_db -f seed_roles_permissions.sql
+
+# 7. Train the ML model (run once)
 python -m app.ml.train
 
-# 7. Start the server
+# 8. Start the server
 uvicorn main:app --reload --port 8000
 ```
 
@@ -102,22 +105,18 @@ result: cities are real US "City, ST" entries, prices are in **USD ($)**, and th
 
 ## Seeding Initial Data
 
-After running migrations, seed roles and amenities, then run the generated seed files
+After running migrations, seed roles, permissions, amenities and CMS settings using the
+committed script (idempotent — safe to re-run), then load the generated data files
 (cities + real listings come from `seed_all.sql`):
 
-```sql
--- 1) roles + amenities (generic)
-INSERT INTO roles (name, description) VALUES
-  ('admin',    'Full platform access'),
-  ('landlord', 'Create and manage properties'),
-  ('tenant',   'Search and rent properties');
-
-INSERT INTO amenities (name, icon) VALUES
-  ('WiFi', 'wifi'), ('Parking', 'car'), ('Air Conditioning', 'wind'),
-  ('Gym', 'dumbbell'), ('Pool', 'droplet'), ('Balcony', 'home'),
-  ('Dishwasher', 'layers'), ('Washing Machine', 'rotate-cw'),
-  ('Elevator', 'arrow-up'), ('Security', 'shield');
+```bash
+# 1) roles + permissions + amenities + CMS settings
+psql -U postgres -d rentwise_db -f backend/seed_roles_permissions.sql
 ```
+
+> `seed_roles_permissions.sql` is required: permission-protected endpoints
+> (e.g. creating a property, editing CMS settings, exporting data) check the
+> `role_permissions` table that this script populates.
 
 ```bash
 # 2) regenerate seed + model from the real data (optional — committed copies exist)
@@ -223,7 +222,17 @@ Table price_estimation_logs { id int [pk]; property_id int [ref: > properties.id
 Table maintenance_requests { id int [pk]; property_id int [ref: > properties.id]; tenant_id int [ref: > users.id]; title varchar(255); description text; priority varchar(20); status varchar(20); created_by int [ref: > users.id]; updated_by int [ref: > users.id]; created_at timestamp; updated_at timestamp }
 ```
 
-Paste this at [dbdiagram.io](https://dbdiagram.io) to render the full ERD.
+Paste this at [dbdiagram.io](https://dbdiagram.io) to render the full ERD, then export
+the diagram (PNG/PDF) into `docs/erd/` for the presentation.
+
+---
+
+## API Documentation
+
+- **Swagger / OpenAPI**: http://localhost:8000/docs (interactive)
+- **Postman collection**: import `docs/postman/RentWise.postman_collection.json`.
+  Run *Auth → Login* first; it stores the access/refresh tokens as collection
+  variables so every other request is authenticated automatically.
 
 ---
 
