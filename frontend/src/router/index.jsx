@@ -4,16 +4,17 @@ import { useAuth } from "../hooks/useAuth";
 import Spinner from "../components/ui/Spinner";
 
 // Route-level lazy imports — each becomes its own chunk
-const Landing           = lazy(() => import("../pages/Landing"));
-const PropertyListing   = lazy(() => import("../pages/PropertyListing"));
-const PropertyDetail    = lazy(() => import("../pages/PropertyDetail"));
-const Login             = lazy(() => import("../pages/auth/Login"));
-const Register          = lazy(() => import("../pages/auth/Register"));
-const ForgotPassword    = lazy(() => import("../pages/auth/ForgotPassword"));
-const TenantDashboard   = lazy(() => import("../pages/dashboard/TenantDashboard"));
+const Landing = lazy(() => import("../pages/Landing"));
+const PropertyListing = lazy(() => import("../pages/PropertyListing"));
+const PropertyDetail = lazy(() => import("../pages/PropertyDetail"));
+const Login = lazy(() => import("../pages/auth/Login"));
+const Register = lazy(() => import("../pages/auth/Register"));
+const ForgotPassword = lazy(() => import("../pages/auth/ForgotPassword"));
+const TenantDashboard = lazy(() => import("../pages/dashboard/TenantDashboard"));
 const LandlordDashboard = lazy(() => import("../pages/dashboard/LandlordDashboard"));
-const AdminDashboard    = lazy(() => import("../pages/dashboard/AdminDashboard"));
-const NotFound          = lazy(() => import("../pages/NotFound"));
+const AdminDashboard = lazy(() => import("../pages/dashboard/AdminDashboard"));
+const Profile = lazy(() => import("../pages/dashboard/Profile"));
+const NotFound = lazy(() => import("../pages/NotFound"));
 
 function ProtectedRoute({ children, requiredRole }) {
   const { isAuthenticated, user } = useAuth();
@@ -33,11 +34,11 @@ export default function AppRouter() {
       <Suspense fallback={<div className="flex h-screen items-center justify-center"><Spinner size="lg" /></div>}>
         <Routes>
           {/* Public */}
-          <Route path="/"             element={<Landing />} />
-          <Route path="/properties"   element={<PropertyListing />} />
+          <Route path="/" element={<Landing />} />
+          <Route path="/properties" element={<PropertyListing />} />
           <Route path="/properties/:id" element={<PropertyDetail />} />
-          <Route path="/login"        element={<Login />} />
-          <Route path="/register"     element={<Register />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
           {/* Tenant */}
@@ -58,6 +59,13 @@ export default function AppRouter() {
           <Route path="/dashboard/admin" element={
             <ProtectedRoute requiredRole="admin">
               <AdminDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Shared profile page for any authenticated user */}
+          <Route path="/dashboard/profile" element={
+            <ProtectedRoute>
+              <Profile />
             </ProtectedRoute>
           } />
 
