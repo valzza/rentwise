@@ -1,41 +1,30 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.core.dependencies import get_db, get_current_user, require_role
-from app.models.user_models import User, Role, UserRole
+from app.core.dependencies import get_db, get_current_user
+from app.models.user_models import User
+from app.services.user_service import UserService
 from app.schemas.user_schemas import UserOut, UserUpdateRequest
 
 router = APIRouter()
 
 
+def _svc(db: AsyncSession = Depends(get_db)) -> UserService:
+    return UserService(db)
+
+
 @router.get("/me", response_model=UserOut)
 async def get_me(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    svc: UserService = Depends(_svc),
 ):
-    result = await db.execute(
-        select(Role.name)
-        .join(UserRole, UserRole.role_id == Role.id)
-        .where(UserRole.user_id == current_user.id)
-    )
-    roles = [r[0] for r in result.all()]
-    data = UserOut.model_validate(current_user)
-    data.roles = roles
-    return data
+    return await svc.get_me(current_user)
 
 
 @router.put("/me", response_model=UserOut)
 async def update_me(
     data: UserUpdateRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    svc: UserService = Depends(_svc),
 ):
-    updates = data.model_dump(exclude_none=True)
-    # Never allow is_active to be self-set
-    updates.pop("is_active", None)
-    for key, value in updates.items():
-        setattr(current_user, key, value)
-    await db.commit()
-    await db.refresh(current_user)
-    return current_user
+    return await svc.update_me(current_user, data)
