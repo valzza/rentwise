@@ -7,7 +7,9 @@ from sqlalchemy import select
 
 from app.db.database import AsyncSessionLocal
 from app.core.security import decode_access_token
-from app.models.user_models import User, UserRole, Role
+from app.models.user_models import User, UserRole, Role, RolePermission, Permission
+from app.services.audit_service import AuditService
+from app.repositories.audit_repository import AuditRepository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
 
@@ -71,3 +73,38 @@ def require_role(*roles: str):
         return current_user
 
     return _check
+
+
+async def get_user_permissions(user: User, db: AsyncSession) -> List[str]:
+    result = await db.execute(
+        select(Permission.name)
+        .join(RolePermission, RolePermission.permission_id == Permission.id)
+        .join(UserRole, UserRole.role_id == RolePermission.role_id)
+        .where(UserRole.user_id == user.id)
+    )
+    return [row[0] for row in result.all()]
+
+
+def require_permission(*permissions: str):
+    """
+    Dependency factory — raises 403 unless the user's roles grant at least one
+    of the named permissions. Usage: Depends(require_permission("property:create"))
+    """
+    async def _check(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        user_perms = await get_user_permissions(current_user, db)
+        if not any(p in user_perms for p in permissions):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of permissions: {list(permissions)}",
+            )
+        return current_user
+
+    return _check
+
+
+def get_audit_service(db: AsyncSession = Depends(get_db)) -> AuditService:
+    """Shared dependency so any router/service can record audit-trail entries."""
+    return AuditService(AuditRepository(db))
