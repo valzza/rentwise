@@ -5,7 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import anthropic
 
 from app.core.config import settings
-from app.core.dependencies import get_db, get_current_user, require_role
+from app.core.dependencies import get_db, get_current_user, require_role, require_permission, get_audit_service
+from app.services.audit_service import AuditService
 from app.models.user_models import User
 from app.repositories.property_repository import PropertyRepository
 from app.services.property_service import PropertyService
@@ -95,11 +96,14 @@ async def list_properties(
 @router.post("", response_model=PropertyOut, status_code=status.HTTP_201_CREATED)
 async def create_property(
     data: PropertyCreateRequest,
-    current_user: User = Depends(require_role("landlord", "admin")),
+    current_user: User = Depends(require_permission("property:create")),
     db: AsyncSession = Depends(get_db),
     svc: PropertyService = Depends(_svc),
+    audit: AuditService = Depends(get_audit_service),
 ):
     prop = await svc.create_property(data, current_user)
+    await audit.log(action="create", entity="property", user_id=current_user.id,
+                    entity_id=prop.id, new_value={"title": prop.title, "price": float(prop.price)})
     await db.commit()
     await db.refresh(prop)
     return prop
@@ -144,8 +148,11 @@ async def update_property(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     svc: PropertyService = Depends(_svc),
+    audit: AuditService = Depends(get_audit_service),
 ):
     prop = await svc.update_property(property_id, data, current_user)
+    await audit.log(action="update", entity="property", user_id=current_user.id,
+                    entity_id=property_id, new_value=data.model_dump(exclude_none=True))
     await db.commit()
     return prop
 
@@ -156,6 +163,8 @@ async def delete_property(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     svc: PropertyService = Depends(_svc),
+    audit: AuditService = Depends(get_audit_service),
 ):
     await svc.delete_property(property_id, current_user)
+    await audit.log(action="delete", entity="property", user_id=current_user.id, entity_id=property_id)
     await db.commit()
