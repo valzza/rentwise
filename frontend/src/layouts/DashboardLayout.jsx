@@ -25,7 +25,7 @@ export default function DashboardLayout({ children }) {
   const nav = isAdmin ? adminNav : isLandlord ? landlordNav : tenantNav;
 
   const handleLogout = async () => {
-    try { await authApi.logout(refreshToken); } catch {}
+    try { await authApi.logout(refreshToken); } catch { }
     logout();
     navigate("/login");
   };
@@ -43,10 +43,9 @@ export default function DashboardLayout({ children }) {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100"
-                    : "text-gray-600 hover:bg-gray-100"
+                `flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive
+                  ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100"
+                  : "text-gray-600 hover:bg-gray-100"
                 }`
               }
             >
@@ -55,6 +54,15 @@ export default function DashboardLayout({ children }) {
           ))}
           <NavLink to="/properties" className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">
             Properties
+          </NavLink>
+          <NavLink
+            to="/dashboard/profile"
+            className={({ isActive }) =>
+              `flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${isActive ? "bg-brand-50 text-brand-700 ring-1 ring-brand-100" : "text-gray-600 hover:bg-gray-100"
+              }`
+            }
+          >
+            My Profile
           </NavLink>
         </nav>
         <div className="border-t p-4">
