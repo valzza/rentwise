@@ -1,8 +1,8 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func, and_
 
-from app.models.domain_models import MaintenanceRequest
+from app.models.domain_models import MaintenanceRequest, Property
 from app.repositories.base_repository import AbstractRepository
 
 
@@ -24,6 +24,26 @@ class MaintenanceRepository(AbstractRepository[MaintenanceRequest]):
 
     async def get_for_tenant(self, tenant_id: int) -> List[MaintenanceRequest]:
         result = await self.db.execute(select(MaintenanceRequest).where(MaintenanceRequest.tenant_id == tenant_id).order_by(MaintenanceRequest.created_at.desc()))
+        return list(result.scalars().all())
+
+    async def search_for_landlord(
+        self, landlord_id: int, status: Optional[str] = None, priority: Optional[str] = None,
+        property_id: Optional[int] = None,
+    ) -> List[MaintenanceRequest]:
+        """All maintenance requests across the landlord's properties (advanced filters)."""
+        filters = [Property.landlord_id == landlord_id]
+        if status:
+            filters.append(MaintenanceRequest.status == status)
+        if priority:
+            filters.append(MaintenanceRequest.priority == priority)
+        if property_id:
+            filters.append(MaintenanceRequest.property_id == property_id)
+        result = await self.db.execute(
+            select(MaintenanceRequest)
+            .join(Property, Property.id == MaintenanceRequest.property_id)
+            .where(and_(*filters))
+            .order_by(MaintenanceRequest.created_at.desc())
+        )
         return list(result.scalars().all())
 
     async def create(self, **kwargs) -> MaintenanceRequest:

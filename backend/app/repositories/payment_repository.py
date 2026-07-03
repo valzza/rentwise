@@ -23,13 +23,29 @@ class PaymentRepository(AbstractRepository[Payment]):
         result = await self.db.execute(select(Payment).where(Payment.stripe_payment_id == stripe_id))
         return result.scalar_one_or_none()
 
-    async def get_for_tenant(self, tenant_id: int, status: Optional[str] = None, page: int = 1, page_size: int = 10) -> tuple:
+    async def get_for_tenant(
+        self, tenant_id: int, status: Optional[str] = None, page: int = 1, page_size: int = 10,
+        type_filter: Optional[str] = None, date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None, min_amount: Optional[float] = None,
+        max_amount: Optional[float] = None, sort_order: str = "desc",
+    ) -> tuple:
+        from sqlalchemy import and_
         filters = [Payment.tenant_id == tenant_id]
         if status:
             filters.append(Payment.status == status)
-        from sqlalchemy import and_
+        if type_filter:
+            filters.append(Payment.type == type_filter)
+        if date_from:
+            filters.append(Payment.created_at >= date_from)
+        if date_to:
+            filters.append(Payment.created_at <= date_to)
+        if min_amount is not None:
+            filters.append(Payment.amount >= min_amount)
+        if max_amount is not None:
+            filters.append(Payment.amount <= max_amount)
         total = (await self.db.execute(select(func.count()).select_from(Payment).where(and_(*filters)))).scalar_one()
-        result = await self.db.execute(select(Payment).where(and_(*filters)).order_by(Payment.created_at.desc()).offset((page - 1) * page_size).limit(page_size))
+        order = Payment.created_at.asc() if sort_order == "asc" else Payment.created_at.desc()
+        result = await self.db.execute(select(Payment).where(and_(*filters)).order_by(order).offset((page - 1) * page_size).limit(page_size))
         return list(result.scalars().all()), total
 
     async def get_earnings_for_landlord(self, landlord_id: int) -> dict:
