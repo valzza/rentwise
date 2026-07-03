@@ -4,6 +4,9 @@ import { bookingApi } from "../../api/bookingApi";
 import { applicationApi } from "../../api/applicationApi";
 import { paymentApi } from "../../api/paymentApi";
 import { propertyApi } from "../../api/propertyApi";
+import { leaseApi } from "../../api/leaseApi";
+import { maintenanceApi } from "../../api/maintenanceApi";
+import { fileApi } from "../../api/fileApi";
 import { useAuth } from "../../hooks/useAuth";
 import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
@@ -15,8 +18,8 @@ import toast from "react-hot-toast";
 const EarningsChart = lazy(() => import("../../components/EarningsChart"));
 const PriceEstimatorTool = lazy(() => import("../../components/PriceEstimatorTool"));
 
-const statusColor = { pending: "yellow", confirmed: "green", rejected: "red", approved: "green" };
-const TABS = ["My Properties", "Bookings", "Applications", "Earnings", "AI Price Estimator"];
+const statusColor = { pending: "yellow", confirmed: "green", rejected: "red", approved: "green", in_progress: "blue", resolved: "green", closed: "gray", active: "green" };
+const TABS = ["My Properties", "Bookings", "Applications", "Leases", "Maintenance", "Earnings", "AI Price Estimator"];
 
 export default function LandlordDashboard() {
   const { user } = useAuth();
@@ -24,16 +27,25 @@ export default function LandlordDashboard() {
   const [properties, setProperties] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [applications, setApplications] = useState([]);
+  const [appStatusFilter, setAppStatusFilter] = useState("");
+  const [leases, setLeases] = useState([]);
+  const [maintenance, setMaintenance] = useState([]);
+  const [maintFilter, setMaintFilter] = useState({ status: "", priority: "" });
   const [earnings, setEarnings] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Create property modal state
   const [showCreate, setShowCreate] = useState(false);
   const [newProp, setNewProp] = useState({ title: "", description: "", price: "", city_id: "", size_m2: "", num_rooms: "", num_bathrooms: "", is_pet_friendly: false });
+  const [images, setImages] = useState([]);
   const [bulletPoints, setBulletPoints] = useState("");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cities, setCities] = useState([]);
+
+  // Create lease form state
+  const [leaseForm, setLeaseForm] = useState({ property_id: "", tenant_id: "", start_date: "", end_date: "", monthly_rent: "", deposit_amount: "" });
+  const [creatingLease, setCreatingLease] = useState(false);
 
   useEffect(() => {
     propertyApi.getCities().then(({ data }) => setCities(data));
@@ -57,7 +69,7 @@ export default function LandlordDashboard() {
     e.preventDefault();
     setSaving(true);
     try {
-      await propertyApi.create({
+      const { data: created } = await propertyApi.create({
         ...newProp,
         price: parseFloat(newProp.price),
         city_id: parseInt(newProp.city_id),
@@ -65,9 +77,18 @@ export default function LandlordDashboard() {
         num_rooms: parseInt(newProp.num_rooms),
         num_bathrooms: parseInt(newProp.num_bathrooms),
       });
+
+      // Upload selected images and link them to the new property
+      if (images.length && created?.id) {
+        for (const img of images) {
+          await fileApi.upload(img, { entity: "property", entityId: created.id, linkProperty: true });
+        }
+      }
+
       toast.success("Property created!");
       setShowCreate(false);
       setNewProp({ title: "", description: "", price: "", city_id: "", size_m2: "", num_rooms: "", num_bathrooms: "", is_pet_friendly: false });
+      setImages([]);
       setBulletPoints("");
       propertyApi.search({ page: 1, page_size: 20 }).then(({ data }) => setProperties(data.items));
     } catch {
@@ -75,6 +96,54 @@ export default function LandlordDashboard() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const togglePropertyStatus = async (p) => {
+    const next = p.status === "active" ? "inactive" : "active";
+    try {
+      await propertyApi.update(p.id, { status: next });
+      setProperties((ps) => ps.map((x) => x.id === p.id ? { ...x, status: next } : x));
+      toast.success(`Property marked ${next}`);
+    } catch { toast.error("Update failed"); }
+  };
+
+  const deleteProperty = async (id) => {
+    if (!window.confirm("Delete this property? This cannot be undone.")) return;
+    try {
+      await propertyApi.remove(id);
+      setProperties((ps) => ps.filter((x) => x.id !== id));
+      toast.success("Property deleted");
+    } catch { toast.error("Delete failed"); }
+  };
+
+  const createLease = async (e) => {
+    e.preventDefault();
+    setCreatingLease(true);
+    try {
+      await leaseApi.create({
+        property_id: parseInt(leaseForm.property_id),
+        tenant_id: parseInt(leaseForm.tenant_id),
+        start_date: leaseForm.start_date,
+        end_date: leaseForm.end_date,
+        monthly_rent: parseFloat(leaseForm.monthly_rent),
+        deposit_amount: parseFloat(leaseForm.deposit_amount),
+      });
+      toast.success("Lease created!");
+      setLeaseForm({ property_id: "", tenant_id: "", start_date: "", end_date: "", monthly_rent: "", deposit_amount: "" });
+      leaseApi.list().then(({ data }) => setLeases(data));
+    } catch (err) {
+      toast.error(err.response?.data?.detail ?? "Failed to create lease");
+    } finally {
+      setCreatingLease(false);
+    }
+  };
+
+  const updateMaintStatus = async (id, status) => {
+    try {
+      await maintenanceApi.updateStatus(id, { status });
+      setMaintenance((ms) => ms.map((m) => m.id === id ? { ...m, status } : m));
+      toast.success(`Marked ${status}`);
+    } catch { toast.error("Update failed"); }
   };
 
   useEffect(() => {
@@ -90,15 +159,24 @@ export default function LandlordDashboard() {
     }
     if (tab === "Applications") {
       setLoading(true);
-      applicationApi.listMine({ page: 1, page_size: 20 })
+      applicationApi.listLandlord({ status: appStatusFilter || undefined, page: 1, page_size: 20 })
         .then(({ data }) => setApplications(data.items)).finally(() => setLoading(false));
+    }
+    if (tab === "Leases") {
+      setLoading(true);
+      leaseApi.list().then(({ data }) => setLeases(data)).finally(() => setLoading(false));
+    }
+    if (tab === "Maintenance") {
+      setLoading(true);
+      maintenanceApi.listLandlord({ status: maintFilter.status || undefined, priority: maintFilter.priority || undefined })
+        .then(({ data }) => setMaintenance(data)).finally(() => setLoading(false));
     }
     if (tab === "Earnings") {
       setLoading(true);
       paymentApi.getEarnings()
         .then(({ data }) => setEarnings(data)).finally(() => setLoading(false));
     }
-  }, [tab]);
+  }, [tab, appStatusFilter, maintFilter]);
 
   const updateBookingStatus = async (id, status) => {
     try {
@@ -143,7 +221,13 @@ export default function LandlordDashboard() {
                     <p className="font-medium text-gray-900">{p.title}</p>
                     <p className="text-xs text-gray-500">${Number(p.price).toLocaleString()}/mo · {p.num_rooms} rooms</p>
                   </div>
-                  <Badge color={p.status === "active" ? "green" : "gray"}>{p.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge color={p.status === "active" ? "green" : "gray"}>{p.status}</Badge>
+                    <Button size="sm" variant="secondary" onClick={() => togglePropertyStatus(p)}>
+                      {p.status === "active" ? "Deactivate" : "Activate"}
+                    </Button>
+                    <Button size="sm" variant="danger" onClick={() => deleteProperty(p.id)}>Delete</Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -174,6 +258,18 @@ export default function LandlordDashboard() {
 
           {tab === "Applications" && (
             <div className="space-y-3">
+              <div className="flex justify-end">
+                <select
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  value={appStatusFilter}
+                  onChange={(e) => setAppStatusFilter(e.target.value)}
+                >
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
               {applications.length === 0 && <p className="text-gray-500 text-sm">No applications.</p>}
               {applications.map((a) => (
                 <div key={a.id} className="flex items-center justify-between rounded-xl border bg-white px-5 py-4">
@@ -187,6 +283,90 @@ export default function LandlordDashboard() {
                       <>
                         <Button size="sm" onClick={() => updateAppStatus(a.id, "approved")}>Approve</Button>
                         <Button size="sm" variant="danger" onClick={() => updateAppStatus(a.id, "rejected")}>Reject</Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === "Leases" && (
+            <div className="space-y-6">
+              <form onSubmit={createLease} className="rounded-xl border bg-white p-5 space-y-4">
+                <h3 className="font-semibold text-gray-900">Create a Lease</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm font-medium text-gray-700">Property</label>
+                    <select
+                      className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                      value={leaseForm.property_id}
+                      onChange={(e) => setLeaseForm((f) => ({ ...f, property_id: e.target.value }))}
+                      required
+                    >
+                      <option value="">Select a property</option>
+                      {properties.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
+                    </select>
+                  </div>
+                  <Input label="Tenant ID" type="number" value={leaseForm.tenant_id} onChange={(e) => setLeaseForm((f) => ({ ...f, tenant_id: e.target.value }))} required />
+                  <Input label="Start date" type="date" value={leaseForm.start_date} onChange={(e) => setLeaseForm((f) => ({ ...f, start_date: e.target.value }))} required />
+                  <Input label="End date" type="date" value={leaseForm.end_date} onChange={(e) => setLeaseForm((f) => ({ ...f, end_date: e.target.value }))} required />
+                  <Input label="Monthly rent ($)" type="number" value={leaseForm.monthly_rent} onChange={(e) => setLeaseForm((f) => ({ ...f, monthly_rent: e.target.value }))} required />
+                  <Input label="Deposit ($)" type="number" value={leaseForm.deposit_amount} onChange={(e) => setLeaseForm((f) => ({ ...f, deposit_amount: e.target.value }))} required />
+                </div>
+                <p className="text-xs text-gray-400">Tip: the tenant ID is shown on each rental application.</p>
+                <Button type="submit" loading={creatingLease}>Create Lease</Button>
+              </form>
+
+              <div className="space-y-3">
+                {leases.length === 0 && <p className="text-gray-500 text-sm">No leases yet.</p>}
+                {leases.map((l) => (
+                  <div key={l.id} className="flex items-center justify-between rounded-xl border bg-white px-5 py-4">
+                    <div>
+                      <p className="font-medium text-gray-900">Lease #{l.id} — Property #{l.property_id}</p>
+                      <p className="text-xs text-gray-500">Tenant #{l.tenant_id} · {l.start_date} → {l.end_date} · ${Number(l.monthly_rent).toLocaleString()}/mo</p>
+                    </div>
+                    <Badge color={statusColor[l.status] ?? "gray"}>{l.status}</Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {tab === "Maintenance" && (
+            <div className="space-y-3">
+              <div className="flex justify-end gap-2">
+                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={maintFilter.status}
+                  onChange={(e) => setMaintFilter((f) => ({ ...f, status: e.target.value }))}>
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In progress</option>
+                  <option value="resolved">Resolved</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <select className="rounded-lg border border-gray-300 px-3 py-2 text-sm" value={maintFilter.priority}
+                  onChange={(e) => setMaintFilter((f) => ({ ...f, priority: e.target.value }))}>
+                  <option value="">All priorities</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+              {maintenance.length === 0 && <p className="text-gray-500 text-sm">No maintenance requests.</p>}
+              {maintenance.map((m) => (
+                <div key={m.id} className="flex items-center justify-between rounded-xl border bg-white px-5 py-4">
+                  <div>
+                    <p className="font-medium text-gray-900">{m.title} <span className="text-xs text-gray-400">(Property #{m.property_id})</span></p>
+                    <p className="text-xs text-gray-500">{m.description}</p>
+                    <p className="text-xs text-gray-400">Priority: {m.priority}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge color={statusColor[m.status] ?? "gray"}>{m.status}</Badge>
+                    {m.status !== "resolved" && m.status !== "closed" && (
+                      <>
+                        <Button size="sm" onClick={() => updateMaintStatus(m.id, "in_progress")}>Start</Button>
+                        <Button size="sm" variant="secondary" onClick={() => updateMaintStatus(m.id, "resolved")}>Resolve</Button>
                       </>
                     )}
                   </div>
@@ -257,6 +437,18 @@ export default function LandlordDashboard() {
                   <input type="checkbox" checked={newProp.is_pet_friendly} onChange={(e) => setNewProp((p) => ({ ...p, is_pet_friendly: e.target.checked }))} />
                   Pet-friendly
                 </label>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-sm font-medium text-gray-700">Photos</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={(e) => setImages(Array.from(e.target.files))}
+                  className="text-sm"
+                />
+                {images.length > 0 && <p className="text-xs text-gray-500">{images.length} image(s) selected — the first becomes the cover photo.</p>}
               </div>
 
               {/* AI Description Generator */}
