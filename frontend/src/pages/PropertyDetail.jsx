@@ -3,11 +3,13 @@ import { useParams } from "react-router-dom";
 import { propertyApi } from "../api/propertyApi";
 import { bookingApi } from "../api/bookingApi";
 import { applicationApi } from "../api/applicationApi";
+import { savedPropertiesApi } from "../api/savedPropertiesApi";
 import { useAuth } from "../hooks/useAuth";
 import Spinner from "../components/ui/Spinner";
 import Button from "../components/ui/Button";
 import Badge from "../components/ui/Badge";
 import PriceEstimateBadge from "../components/PriceEstimateBadge";
+import ReviewSection from "../components/ReviewSection";
 import Logo from "../components/Logo";
 import toast from "react-hot-toast";
 
@@ -50,6 +52,15 @@ export default function PropertyDetail() {
             toast.success("Application submitted!");
         } catch (err) {
             toast.error(err.response?.data?.detail ?? "Application failed");
+        }
+    };
+
+    const toggleSave = async () => {
+        try {
+            const { data } = await savedPropertiesApi.toggle(property.id);
+            toast.success(data.saved ? "Saved to favorites" : "Removed from favorites");
+        } catch {
+            toast.error("Could not update favorites");
         }
     };
 
@@ -109,6 +120,10 @@ export default function PropertyDetail() {
                             </Suspense>
                         </div>
                     )}
+
+                    <div className="border-t border-gray-200 pt-6">
+                        <ReviewSection propertyId={property.id} />
+                    </div>
                 </div>
 
                 {/* Right: pricing + actions */}
@@ -135,6 +150,7 @@ export default function PropertyDetail() {
                                 </div>
                                 <Button onClick={bookViewing} loading={bookingLoading} className="w-full">Book a Viewing</Button>
                                 <Button variant="secondary" onClick={applyForRental} className="w-full">Apply for Rental</Button>
+                                <Button variant="ghost" onClick={toggleSave} className="w-full">♡ Save to favorites</Button>
                             </>
                         )}
 

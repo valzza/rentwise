@@ -1,22 +1,36 @@
 import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { propertyApi } from "../api/propertyApi";
+import { settingsApi } from "../api/settingsApi";
 import PropertyCard from "../components/PropertyCard";
 import Spinner from "../components/ui/Spinner";
 import Logo from "../components/Logo";
 import { useAuth } from "../hooks/useAuth";
+
+// Fallback copy used until the CMS settings load (or if Mongo/DB is unavailable).
+const DEFAULT_CMS = {
+  homepage_title: "Find Your Perfect Rental",
+  homepage_slogan: "AI-powered pricing, real-time updates, and a seamless rental experience across the United States.",
+  welcome_message: "Browse thousands of verified listings and book viewings in minutes.",
+};
 
 export default function Landing() {
   const { isAuthenticated } = useAuth();
   const [q, setQ] = useState("");
   const [featured, setFeatured] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cms, setCms] = useState(DEFAULT_CMS);
   const navigate = useNavigate();
 
   useEffect(() => {
     propertyApi.getFeatured()
       .then(({ data }) => setFeatured(data))
       .finally(() => setLoading(false));
+
+    // CMS-controlled homepage copy (editable by admins, no redeploy)
+    settingsApi.getPublic()
+      .then(({ data }) => setCms((prev) => ({ ...prev, ...data })))
+      .catch(() => {});
   }, []);
 
   const handleSearch = (e) => {
@@ -53,10 +67,13 @@ export default function Landing() {
             <Logo size="xl" showTagline />
           </div>
           <h1 className="mb-3 text-3xl md:text-4xl font-bold text-gray-900">
-            Find Your Perfect Rental
+            {cms.homepage_title}
           </h1>
-          <p className="mb-8 text-base text-gray-500">
-            AI-powered pricing, real-time updates, and a seamless rental experience across the United States.
+          <p className="mb-2 text-base text-gray-500">
+            {cms.homepage_slogan}
+          </p>
+          <p className="mb-8 text-sm text-gray-400">
+            {cms.welcome_message}
           </p>
           <form onSubmit={handleSearch} className="mx-auto flex max-w-lg gap-2">
             <input
