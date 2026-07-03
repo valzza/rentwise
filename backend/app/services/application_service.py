@@ -26,6 +26,11 @@ class ApplicationService:
     async def get_for_property(self, property_id: int, status_filter, page, page_size):
         return await self.repo.get_for_property(property_id, status_filter, page, page_size)
 
+    async def get_for_landlord(self, user: User, status_filter, date_from, date_to, sort_order, page, page_size):
+        return await self.repo.get_for_landlord(
+            user.id, status_filter, date_from, date_to, sort_order, page, page_size
+        )
+
     async def update_status(self, application_id: int, data: ApplicationStatusUpdate, current_user: User):
         app = await self.repo.get_by_id(application_id)
         if not app:

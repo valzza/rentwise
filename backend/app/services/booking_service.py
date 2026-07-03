@@ -21,10 +21,13 @@ class BookingService:
             updated_by=current_user.id,
         )
 
-    async def get_my_bookings(self, user: User, role: str, status_filter, page, page_size):
+    async def get_my_bookings(self, user: User, role: str, status_filter, page, page_size,
+                              date_from=None, date_to=None, sort_order="desc"):
         if role == "tenant":
-            return await self.repo.get_for_tenant(user.id, status_filter, page, page_size)
-        return await self.repo.get_for_landlord(user.id, status_filter, page, page_size)
+            return await self.repo.get_for_tenant(user.id, status_filter, page, page_size,
+                                                  date_from, date_to, sort_order)
+        return await self.repo.get_for_landlord(user.id, status_filter, page, page_size,
+                                                date_from, date_to, sort_order)
 
     async def update_status(self, booking_id: int, data: BookingStatusUpdate, current_user: User):
         booking = await self.repo.get_by_id(booking_id)
