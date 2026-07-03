@@ -1,10 +1,11 @@
 import math
 from typing import List, Tuple
 from fastapi import HTTPException, status
+from sqlalchemy import select
 
 from app.repositories.property_repository import PropertyRepository
 from app.models.domain_models import Property
-from app.models.user_models import User
+from app.models.user_models import User, Role, UserRole
 from app.schemas.property_schemas import (
     PropertyCreateRequest, PropertyUpdateRequest,
     PropertySearchParams, PaginatedProperties, PropertyOut,
@@ -14,6 +15,14 @@ from app.schemas.property_schemas import (
 class PropertyService:
     def __init__(self, repo: PropertyRepository):
         self.repo = repo
+
+    async def _role_names(self, user_id: int) -> List[str]:
+        # Query roles explicitly — the User instance isn't loaded with its
+        # relationships, and lazy-loading is unsafe under async SQLAlchemy.
+        result = await self.repo.db.execute(
+            select(Role.name).join(UserRole, UserRole.role_id == Role.id).where(UserRole.user_id == user_id)
+        )
+        return [r[0] for r in result.all()]
 
     async def create_property(self, data: PropertyCreateRequest, current_user: User) -> Property:
         prop = await self.repo.create(
@@ -45,9 +54,10 @@ class PropertyService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
 
         # Only owner or admin can update
-        user_roles = [ur.role.name for ur in current_user.user_roles] if current_user.user_roles else []
-        if prop.landlord_id != current_user.id and "admin" not in user_roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this property")
+        if prop.landlord_id != current_user.id:
+            user_roles = await self._role_names(current_user.id)
+            if "admin" not in user_roles:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this property")
 
         updates = data.model_dump(exclude_none=True)
         updates["updated_by"] = current_user.id
@@ -58,14 +68,27 @@ class PropertyService:
         if not prop:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Property not found")
 
-        user_roles = [ur.role.name for ur in current_user.user_roles] if current_user.user_roles else []
-        if prop.landlord_id != current_user.id and "admin" not in user_roles:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+        if prop.landlord_id != current_user.id:
+            user_roles = await self._role_names(current_user.id)
+            if "admin" not in user_roles:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
 
         await self.repo.delete(property_id)
 
-    async def search(self, params: PropertySearchParams) -> PaginatedProperties:
+    async def search(self, params: PropertySearchParams, user_id: int | None = None) -> PaginatedProperties:
         items, total = await self.repo.search(params)
+
+        # Log the search to MongoDB for analytics (degrades gracefully if Mongo is down)
+        try:
+            from app.repositories.mongo_repository import MongoRepository
+            await MongoRepository().log_search(
+                user_id=user_id,
+                query_params=params.model_dump(exclude_none=True),
+                results_count=total,
+            )
+        except Exception:
+            pass
+
         pages = math.ceil(total / params.page_size) if params.page_size else 1
         return PaginatedProperties(
             items=[PropertyOut.model_validate(p) for p in items],
