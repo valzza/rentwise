@@ -9,11 +9,17 @@ from app.core.security import (
 from app.core.config import settings
 from app.schemas.auth_schemas import RegisterRequest, LoginRequest, TokenResponse
 from app.models.user_models import User
+from app.services.audit_service import AuditService
 
 
 class AuthService:
-    def __init__(self, repo: UserRepository):
+    def __init__(self, repo: UserRepository, audit_svc: AuditService | None = None):
         self.repo = repo
+        self.audit_svc = audit_svc
+
+    async def _audit(self, **kwargs) -> None:
+        if self.audit_svc:
+            await self.audit_svc.log(**kwargs)
 
     async def register(self, data: RegisterRequest, ip_address: str | None = None) -> TokenResponse:
         existing = await self.repo.get_by_email(data.email)
@@ -34,9 +40,13 @@ class AuthService:
         await self.repo.update_user(user.id, created_by=user.id, updated_by=user.id)
         await self.repo.assign_role(user.id, role.id)
 
+        await self._audit(
+            action="register", entity="user", user_id=user.id, entity_id=user.id,
+            new_value={"email": user.email, "role": data.role}, ip_address=ip_address,
+        )
         return await self._issue_tokens(user)
 
-    async def login(self, data: LoginRequest) -> TokenResponse:
+    async def login(self, data: LoginRequest, ip_address: str | None = None) -> TokenResponse:
         user = await self.repo.get_by_email(data.email)
         if not user or not verify_password(data.password, user.password_hash):
             raise HTTPException(
@@ -46,6 +56,10 @@ class AuthService:
         if not user.is_active:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is deactivated")
 
+        await self._audit(
+            action="login", entity="user", user_id=user.id, entity_id=user.id,
+            ip_address=ip_address,
+        )
         return await self._issue_tokens(user)
 
     async def refresh(self, token: str) -> TokenResponse:
@@ -67,8 +81,15 @@ class AuthService:
 
         return await self._issue_tokens(user)
 
-    async def logout(self, token: str) -> None:
+    async def logout(self, token: str, ip_address: str | None = None) -> None:
+        rt = await self.repo.get_refresh_token(token)
         await self.repo.revoke_refresh_token(token)
+        await self._audit(
+            action="logout", entity="user",
+            user_id=rt.user_id if rt else None,
+            entity_id=rt.user_id if rt else None,
+            ip_address=ip_address,
+        )
 
     async def _issue_tokens(self, user: User) -> TokenResponse:
         access_token = create_access_token(data={"sub": str(user.id)})
