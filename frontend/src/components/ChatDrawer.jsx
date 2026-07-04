@@ -1,16 +1,17 @@
 // Lazy-loaded — only imports socket.io-client when chat is opened
 import { useState, useEffect, useRef } from "react";
 import { getSocket } from "../hooks/useSocket";
-import { useChatStore } from "../store/chatStore";
+import { useChatStore, chatRoomId, EMPTY_MESSAGES } from "../store/chatStore";
 import { useAuth } from "../hooks/useAuth";
 
 export default function ChatDrawer({ property, otherUserId, onClose }) {
   const { user } = useAuth();
   const [text, setText] = useState("");
   const bottomRef = useRef(null);
-  const roomKey = `${property.id}:${otherUserId}`;
-  const messages = useChatStore((s) => s.getMessages(roomKey));
-  const setHistory = useChatStore((s) => s.setHistory);
+  const roomKey = user ? chatRoomId(property.id, user.id, otherUserId) : null;
+  const messages = useChatStore((s) =>
+    roomKey ? s.rooms[roomKey] ?? EMPTY_MESSAGES : EMPTY_MESSAGES
+  );
 
   useEffect(() => {
     const socket = getSocket();
