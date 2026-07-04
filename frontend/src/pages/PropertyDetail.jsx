@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
 import { propertyApi } from "../api/propertyApi";
 import { bookingApi } from "../api/bookingApi";
 import { applicationApi } from "../api/applicationApi";
@@ -21,11 +21,12 @@ const PropertyMap = lazy(() => import("../components/PropertyMap"));
 
 export default function PropertyDetail() {
     const { id } = useParams();
+    const [searchParams] = useSearchParams();
     const { user, isAuthenticated, isTenant, isLandlord } = useAuth();
     const [property, setProperty] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showChat, setShowChat] = useState(false);
-    const [chatTenantIds, setChatTenantIds] = useState([]);
+    const [chatTenants, setChatTenants] = useState([]);
     const [selectedTenantId, setSelectedTenantId] = useState(null);
     const [bookingDate, setBookingDate] = useState("");
     const [bookingLoading, setBookingLoading] = useState(false);
@@ -36,19 +37,48 @@ export default function PropertyDetail() {
             .finally(() => setLoading(false));
     }, [id]);
 
-    const isPropertyOwner = isLandlord && user?.id === property?.landlord_id;
+    const isPropertyOwner = isLandlord && Number(user?.id) === Number(property?.landlord_id);
 
-    useEffect(() => {
+    const loadChatPartners = useCallback(() => {
         if (!isPropertyOwner || !property?.id) return;
         chatApi.getPartners(property.id)
             .then(({ data }) => {
-                setChatTenantIds(data.tenant_ids ?? []);
-                if (data.tenant_ids?.length === 1) {
-                    setSelectedTenantId(data.tenant_ids[0]);
-                }
+                const tenants = data.tenants ?? (data.tenant_ids ?? []).map((id) => ({ id, name: `Tenant #${id}` }));
+                const ids = tenants.map((t) => t.id);
+                setChatTenants(tenants);
+                setSelectedTenantId((prev) => {
+                    if (prev && ids.includes(prev)) return prev;
+                    if (ids.length === 1) return ids[0];
+                    return prev;
+                });
             })
-            .catch(() => setChatTenantIds([]));
+            .catch(() => setChatTenants([]));
     }, [isPropertyOwner, property?.id]);
+
+    useEffect(() => {
+        loadChatPartners();
+    }, [loadChatPartners]);
+
+    useEffect(() => {
+        if (!isPropertyOwner) return;
+        const interval = setInterval(loadChatPartners, 10000);
+        const onInbox = (e) => {
+            if (Number(e.detail?.property_id) === Number(property?.id)) {
+                loadChatPartners();
+            }
+        };
+        window.addEventListener("rentwise:chat-inbox", onInbox);
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener("rentwise:chat-inbox", onInbox);
+        };
+    }, [isPropertyOwner, property?.id, loadChatPartners]);
+
+    useEffect(() => {
+        if (searchParams.get("chat") === "1" && selectedTenantId) {
+            setShowChat(true);
+        }
+    }, [searchParams, selectedTenantId]);
 
     const chatPartnerId = isTenant
         ? property?.landlord_id
@@ -183,7 +213,7 @@ export default function PropertyDetail() {
                             </>
                         )}
 
-                        {isPropertyOwner && chatTenantIds.length > 0 && (
+                        {isPropertyOwner && chatTenants.length > 0 && (
                             <div className="flex flex-col gap-1">
                                 <label className="text-sm font-medium text-gray-700">Chat with tenant</label>
                                 <select
@@ -192,15 +222,22 @@ export default function PropertyDetail() {
                                     onChange={(e) => setSelectedTenantId(Number(e.target.value))}
                                 >
                                     <option value="" disabled>Select tenant…</option>
-                                    {chatTenantIds.map((tid) => (
-                                        <option key={tid} value={tid}>Tenant #{tid}</option>
+                                    {chatTenants.map((t) => (
+                                        <option key={t.id} value={t.id}>{t.name}</option>
                                     ))}
                                 </select>
                             </div>
                         )}
 
-                        {isPropertyOwner && chatTenantIds.length === 0 && (
-                            <p className="text-xs text-gray-500">No tenant messages yet for this listing.</p>
+                        {isPropertyOwner && chatTenants.length === 0 && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-gray-500">
+                                    No tenant messages yet. When a tenant writes you, they will appear here.
+                                </p>
+                                <Button variant="ghost" size="sm" onClick={loadChatPartners} className="w-full">
+                                    Refresh messages
+                                </Button>
+                            </div>
                         )}
 
                         {canOpenChat && (
