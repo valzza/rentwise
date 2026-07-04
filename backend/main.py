@@ -66,6 +66,7 @@ def create_app() -> FastAPI:
     from app.routers.saved_property_router import router as saved_property_router
     from app.routers.settings_router import router as settings_router
     from app.routers.export_router import router as export_router
+    from app.routers.chat_router import router as chat_router
 
     _app.include_router(auth_router,         prefix="/api/auth",          tags=["Auth"])
     _app.include_router(user_router,         prefix="/api/users",         tags=["Users"])
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     _app.include_router(saved_property_router, prefix="/api/saved-properties", tags=["Saved Properties"])
     _app.include_router(settings_router,     prefix="/api/settings",      tags=["Settings"])
     _app.include_router(export_router,        prefix="/api/admin",         tags=["Export"])
+    _app.include_router(chat_router,          prefix="/api/chat",          tags=["Chat"])
 
     return _app
 
