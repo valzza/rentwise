@@ -2,10 +2,13 @@
 import { useState, useEffect, useRef } from "react";
 import { getSocket } from "../hooks/useSocket";
 import { useChatStore, chatRoomId, EMPTY_MESSAGES } from "../store/chatStore";
+import { chatApi } from "../api/chatApi";
 import { useAuth } from "../hooks/useAuth";
+import toast from "react-hot-toast";
 
 export default function ChatDrawer({ property, otherUserId, onClose }) {
   const { user } = useAuth();
+  const setHistory = useChatStore((s) => s.setHistory);
   const [text, setText] = useState("");
   const bottomRef = useRef(null);
   const roomKey = user ? chatRoomId(property.id, user.id, otherUserId) : null;
@@ -14,11 +17,42 @@ export default function ChatDrawer({ property, otherUserId, onClose }) {
   );
 
   useEffect(() => {
+    if (!roomKey || !property?.id || !otherUserId) return;
+
+    chatApi.getMessages(property.id, otherUserId)
+      .then(({ data }) => setHistory(data.room_id ?? roomKey, data.messages ?? []))
+      .catch(() => toast.error("Could not load chat history from database"));
+  }, [property.id, otherUserId, roomKey, setHistory]);
+
+  useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
 
-    socket.emit("join_chat", { property_id: property.id, other_user_id: otherUserId });
-  }, [property.id, otherUserId]);
+    const onHistory = (payload) => {
+      const room_id = Array.isArray(payload) ? payload[0]?.room_id : payload?.room_id;
+      const messages = Array.isArray(payload) ? payload : payload?.messages ?? [];
+      if (room_id) setHistory(room_id, messages);
+    };
+
+    const join = () => {
+      socket.emit("join_chat", { property_id: property.id, other_user_id: otherUserId });
+    };
+
+    socket.on("chat_history", onHistory);
+    if (socket.connected) join();
+    else socket.on("connect", join);
+
+    const onError = (payload) => {
+      toast.error(payload?.detail ?? "Message not saved to database");
+    };
+    socket.on("chat_error", onError);
+
+    return () => {
+      socket.off("chat_history", onHistory);
+      socket.off("connect", join);
+      socket.off("chat_error", onError);
+    };
+  }, [property.id, otherUserId, setHistory]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -44,7 +78,7 @@ export default function ChatDrawer({ property, otherUserId, onClose }) {
           <p className="text-center text-xs text-gray-400 mt-6">No messages yet. Start the conversation!</p>
         )}
         {messages.map((m, i) => {
-          const mine = m.sender_id === user?.id;
+          const mine = Number(m.sender_id) === Number(user?.id);
           return (
             <div key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm ${mine ? "bg-brand-500 text-white" : "bg-gray-100 text-gray-900"}`}>
