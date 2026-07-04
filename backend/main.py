@@ -12,6 +12,13 @@ from app.db.database import async_engine, motor_client
 async def lifespan(app: FastAPI):
     # ── Startup ──────────────────────────────────────────────────────────
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+    try:
+        await motor_client.admin.command("ping")
+        app.state.mongo_ok = True
+        print(f"[RentWise] MongoDB connected — db={settings.MONGO_DB_NAME}")
+    except Exception as exc:
+        app.state.mongo_ok = False
+        print(f"[RentWise] MongoDB NOT connected — chat will not persist: {exc}")
 
     # Load ML model once; stored on app.state so all requests share the same instance
     try:
