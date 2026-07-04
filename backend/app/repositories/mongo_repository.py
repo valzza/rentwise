@@ -7,6 +7,17 @@ from app.db.database import mongo_db
 logger = logging.getLogger("rentwise.mongo")
 
 
+def _serialize_chat_doc(doc: dict) -> dict:
+    """JSON-safe dict for Socket.IO emits (datetime/ObjectId are not serializable)."""
+    out = dict(doc)
+    if out.get("_id") is not None:
+        out["_id"] = str(out["_id"])
+    ts = out.get("timestamp")
+    if isinstance(ts, datetime):
+        out["timestamp"] = ts.isoformat()
+    return out
+
+
 class MongoRepository:
     """
     Wrapper around the 4 MongoDB collections. Every operation degrades
@@ -64,7 +75,7 @@ class MongoRepository:
         except Exception as e:
             logger.warning(f"MongoDB save_message skipped: {e}")
             doc["_id"] = None
-        return doc
+        return _serialize_chat_doc(doc)
 
     async def get_messages(self, room_id: str, limit: int = 50) -> list:
         try:
@@ -72,9 +83,7 @@ class MongoRepository:
                 {"room_id": room_id}
             ).sort("timestamp", -1).limit(limit)
             docs = await cursor.to_list(length=limit)
-            for d in docs:
-                d["_id"] = str(d["_id"])
-            return list(reversed(docs))
+            return list(reversed([_serialize_chat_doc(d) for d in docs]))
         except Exception as e:
             logger.warning(f"MongoDB get_messages failed, returning empty: {e}")
             return []
