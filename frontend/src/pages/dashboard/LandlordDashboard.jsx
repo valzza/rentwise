@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import DashboardLayout from "../../layouts/DashboardLayout";
 import { bookingApi } from "../../api/bookingApi";
 import { applicationApi } from "../../api/applicationApi";
@@ -149,8 +150,11 @@ export default function LandlordDashboard() {
   useEffect(() => {
     if (tab === "My Properties") {
       setLoading(true);
-      propertyApi.search({ page: 1, page_size: 20 })
-        .then(({ data }) => setProperties(data.items)).finally(() => setLoading(false));
+      propertyApi.search({ page: 1, page_size: 100 })
+        .then(({ data }) => setProperties(
+          data.items.filter((p) => Number(p.landlord_id) === Number(user?.id))
+        ))
+        .finally(() => setLoading(false));
     }
     if (tab === "Bookings") {
       setLoading(true);
@@ -176,7 +180,7 @@ export default function LandlordDashboard() {
       paymentApi.getEarnings()
         .then(({ data }) => setEarnings(data)).finally(() => setLoading(false));
     }
-  }, [tab, appStatusFilter, maintFilter]);
+  }, [tab, appStatusFilter, maintFilter, user?.id]);
 
   const updateBookingStatus = async (id, status) => {
     try {
@@ -223,6 +227,12 @@ export default function LandlordDashboard() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge color={p.status === "active" ? "green" : "gray"}>{p.status}</Badge>
+                    <Link
+                      to={`/properties/${p.id}?chat=1`}
+                      className="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      💬 Messages
+                    </Link>
                     <Button size="sm" variant="secondary" onClick={() => togglePropertyStatus(p)}>
                       {p.status === "active" ? "Deactivate" : "Activate"}
                     </Button>
