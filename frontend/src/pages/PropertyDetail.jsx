@@ -4,6 +4,7 @@ import { propertyApi } from "../api/propertyApi";
 import { bookingApi } from "../api/bookingApi";
 import { applicationApi } from "../api/applicationApi";
 import { savedPropertiesApi } from "../api/savedPropertiesApi";
+import { chatApi } from "../api/chatApi";
 import { useAuth } from "../hooks/useAuth";
 import Spinner from "../components/ui/Spinner";
 import Button from "../components/ui/Button";
@@ -24,6 +25,8 @@ export default function PropertyDetail() {
     const [property, setProperty] = useState(null);
     const [loading, setLoading] = useState(true);
     const [showChat, setShowChat] = useState(false);
+    const [chatTenantIds, setChatTenantIds] = useState([]);
+    const [selectedTenantId, setSelectedTenantId] = useState(null);
     const [bookingDate, setBookingDate] = useState("");
     const [bookingLoading, setBookingLoading] = useState(false);
 
@@ -32,6 +35,32 @@ export default function PropertyDetail() {
             .then(({ data }) => setProperty(data))
             .finally(() => setLoading(false));
     }, [id]);
+
+    const isPropertyOwner = isLandlord && user?.id === property?.landlord_id;
+
+    useEffect(() => {
+        if (!isPropertyOwner || !property?.id) return;
+        chatApi.getPartners(property.id)
+            .then(({ data }) => {
+                setChatTenantIds(data.tenant_ids ?? []);
+                if (data.tenant_ids?.length === 1) {
+                    setSelectedTenantId(data.tenant_ids[0]);
+                }
+            })
+            .catch(() => setChatTenantIds([]));
+    }, [isPropertyOwner, property?.id]);
+
+    const chatPartnerId = isTenant
+        ? property?.landlord_id
+        : isPropertyOwner
+            ? selectedTenantId
+            : property?.landlord_id;
+
+    const canOpenChat = isAuthenticated && (
+        (isTenant && property?.landlord_id) ||
+        (isPropertyOwner && selectedTenantId) ||
+        (!isTenant && !isPropertyOwner && property?.landlord_id)
+    );
 
     const bookViewing = async () => {
         if (!bookingDate) { toast.error("Please select a date and time"); return; }
@@ -154,9 +183,29 @@ export default function PropertyDetail() {
                             </>
                         )}
 
-                        {isAuthenticated && (
+                        {isPropertyOwner && chatTenantIds.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                                <label className="text-sm font-medium text-gray-700">Chat with tenant</label>
+                                <select
+                                    className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                                    value={selectedTenantId ?? ""}
+                                    onChange={(e) => setSelectedTenantId(Number(e.target.value))}
+                                >
+                                    <option value="" disabled>Select tenant…</option>
+                                    {chatTenantIds.map((tid) => (
+                                        <option key={tid} value={tid}>Tenant #{tid}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {isPropertyOwner && chatTenantIds.length === 0 && (
+                            <p className="text-xs text-gray-500">No tenant messages yet for this listing.</p>
+                        )}
+
+                        {canOpenChat && (
                             <Button variant="ghost" onClick={() => setShowChat((v) => !v)} className="w-full">
-                                💬 {showChat ? "Close Chat" : "Message Landlord"}
+                                💬 {showChat ? "Close Chat" : isPropertyOwner ? "Open Messages" : "Message Landlord"}
                             </Button>
                         )}
                     </div>
@@ -164,11 +213,11 @@ export default function PropertyDetail() {
             </div>
 
             {/* Chat drawer — lazy loaded */}
-            {showChat && isAuthenticated && (
+            {showChat && chatPartnerId && (
                 <Suspense fallback={null}>
                     <ChatDrawer
                         property={property}
-                        otherUserId={property.landlord_id}
+                        otherUserId={chatPartnerId}
                         onClose={() => setShowChat(false)}
                     />
                 </Suspense>
