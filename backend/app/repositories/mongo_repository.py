@@ -7,6 +7,15 @@ from app.db.database import mongo_db
 logger = logging.getLogger("rentwise.mongo")
 
 
+def chat_room_id(property_id, user_a, user_b) -> str:
+    lo, hi = sorted([int(user_a), int(user_b)])
+    return f"chat:{int(property_id)}:{lo}_{hi}"
+
+
+class MongoWriteError(Exception):
+    """Raised when a MongoDB write fails (chat/notifications must not fake success)."""
+
+
 def _serialize_chat_doc(doc: dict) -> dict:
     """JSON-safe dict for Socket.IO emits (datetime/ObjectId are not serializable)."""
     out = dict(doc)
@@ -64,17 +73,22 @@ class MongoRepository:
     async def save_message(self, room_id: str, sender_id: int, message: str) -> dict:
         doc = {
             "room_id": room_id,
-            "sender_id": sender_id,
+            "sender_id": int(sender_id),
             "message": message,
             "timestamp": datetime.now(timezone.utc),
             "is_read": False,
         }
         try:
             result = await self.db["chat_messages"].insert_one(doc)
+            if not result.acknowledged:
+                raise MongoWriteError("insert not acknowledged")
             doc["_id"] = str(result.inserted_id)
+            logger.info("chat saved room=%s sender=%s id=%s", room_id, sender_id, doc["_id"])
+        except MongoWriteError:
+            raise
         except Exception as e:
-            logger.warning(f"MongoDB save_message skipped: {e}")
-            doc["_id"] = None
+            logger.error("MongoDB save_message failed room=%s: %s", room_id, e, exc_info=True)
+            raise MongoWriteError(str(e)) from e
         return _serialize_chat_doc(doc)
 
     async def get_messages(self, room_id: str, limit: int = 50) -> list:
