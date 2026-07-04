@@ -97,6 +97,26 @@ class MongoRepository:
         except Exception as e:
             logger.warning(f"MongoDB mark_messages_read skipped: {e}")
 
+    async def get_chat_partner_ids(self, property_id: int, landlord_id: int) -> list[int]:
+        """Tenant user IDs who have a chat room on this property with the landlord."""
+        prefix = f"chat:{property_id}:"
+        try:
+            room_ids = await self.db["chat_messages"].distinct(
+                "room_id", {"room_id": {"$regex": f"^{prefix}"}}
+            )
+            partners: set[int] = set()
+            for rid in room_ids:
+                try:
+                    pair = str(rid).split(":")[-1]
+                    a, b = (int(x) for x in pair.split("_"))
+                    partners.add(a if a != landlord_id else b)
+                except (ValueError, IndexError):
+                    continue
+            return sorted(partners)
+        except Exception as e:
+            logger.warning(f"MongoDB get_chat_partner_ids failed: {e}")
+            return []
+
     # ── Notification events ───────────────────────────────────────────────
     async def log_notification_event(self, user_id: int, type: str, payload: dict) -> None:
         try:
